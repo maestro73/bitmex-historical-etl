@@ -1,0 +1,4 @@
+httpx
+firebase-admin
+pandas
+google-cloud-bigquery[pyarrow]
