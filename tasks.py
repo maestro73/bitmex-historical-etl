@@ -1,3 +1,4 @@
+import json
 import os
 
 from invoke import task
@@ -14,7 +15,7 @@ def deploy_function(c):
     topic = os.environ.get(PUBSUB_TOPIC)
     env_vars = get_deploy_env_vars()
     cmd = f"""
-        gcloud functions deploy get-bitmex-historical \
+        gcloud functions deploy bitmex-historical \
             --region={region} \
             --memory=512MB \
             --runtime=python37 \
@@ -37,10 +38,12 @@ def create_pubsub_topic(c):
 @task
 def create_scheduler(c):
     topic = os.environ.get(PUBSUB_TOPIC)
+    message_body = json.dumps({})
     command = f"""
         gcloud scheduler jobs create pubsub bitmex-historical \
             --schedule="*/5 * * * *" \
             --topic={topic} \
+            --message-body='{message_body}'
     """
     c.run(command)
 

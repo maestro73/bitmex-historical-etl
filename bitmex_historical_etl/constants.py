@@ -17,8 +17,8 @@ PRODUCTION_ENV_VARS = (
     BIGQUERY_LOCATION,
     BIGQUERY_DATASET,
     BIGQUERY_TABLE_NAME,
+    FIRESTORE_COLLECTION,
     FIREBASE_URL,
-    PUBSUB_TOPIC,
 )
 
 BITMEX_S3 = "https://s3-eu-west-1.amazonaws.com/public.bitmex.com/data/trade/"
