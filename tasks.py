@@ -13,11 +13,15 @@ set_environment()
 def deploy_function(c):
     region = os.environ.get(BIGQUERY_LOCATION)
     topic = os.environ.get(PUBSUB_TOPIC)
+    # Because Error: memory limit exceeded. Function invocation was interrupted.
+    memory = 2048
+    timeout = 540
     env_vars = get_deploy_env_vars()
     cmd = f"""
         gcloud functions deploy bitmex-historical \
             --region={region} \
-            --memory=512MB \
+            --memory={memory}MB \
+            --timeout={timeout}s \
             --runtime=python37 \
             --entry-point=get_bitmex_historical \
             --set-env-vars={env_vars} \
@@ -41,7 +45,7 @@ def create_scheduler(c):
     message_body = json.dumps({})
     command = f"""
         gcloud scheduler jobs create pubsub bitmex-historical \
-            --schedule="*/5 * * * *" \
+            --schedule="*/10 * * * *" \
             --topic={topic} \
             --message-body='{message_body}'
     """
