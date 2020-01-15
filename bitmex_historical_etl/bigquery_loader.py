@@ -64,8 +64,8 @@ class BigQueryLoader:
     def load(self, data_frame):
         decorator = self.date.strftime("%Y%m%d")
         table_id = f"{self.dataset}.{self.table_name}"
+        # Because BigQuery doesn't use or support indexes.
         partition = f"{table_id}${decorator}"
-        # Because doesn't use or support indexes.
         job = self.bq.load_table_from_dataframe(
             data_frame,
             partition,

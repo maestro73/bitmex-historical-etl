@@ -14,7 +14,8 @@ class S3Downloader:
         filename = temp_file.name
         with open(filename, "wb+") as temp:
             url = get_bitmex_s3_data_url(date)
-            # Streaming gave many EOFErrors.
+            # Streaming downloads with boto3, and httpx gave many EOFErrors.
+            # No problem with regular download.
             response = httpx.get(url)
             if response.status_code == 200:
                 temp.write(response.content)

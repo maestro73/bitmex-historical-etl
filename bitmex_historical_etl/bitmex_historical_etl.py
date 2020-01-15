@@ -1,4 +1,5 @@
 import datetime
+from datetime import timezone
 
 import pandas as pd
 
@@ -8,7 +9,9 @@ from .s3_downloader import S3Downloader
 
 
 class BitmexHistoricalETL:
-    def __init__(self, date):
+    def __init__(self, date, strip_nanoseconds=False):
+        self.strip_nanoseconds = strip_nanoseconds
+
         try:
             self.date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError as e:
@@ -44,29 +47,41 @@ class BitmexHistoricalETL:
 
     def validate_data_frame(self, data_frame):
         timestamp_format = "%Y-%m-%dD%H:%M:%S.%f"
-        # Bitmex data is accurate to the millisecond.
-        # However, data is only provided to 6 decimal places, not 9.
-        # In case it is provided in the future, check for unconverted data.
-        try:
-            for i in range(100):
-                datetime.datetime.strptime(
-                    data_frame.iloc[i].timestamp, timestamp_format
-                )
-        except ValueError as error:
-            _, value = str(error).split(": ")
-            if int(value):
-                raise error
-
         data_frame["timestamp"] = pd.to_datetime(
             data_frame["timestamp"], format=timestamp_format
         )
+        # Because pyarrow.lib.ArrowInvalid: Casting from timestamp[ns]
+        # to timestamp[us, tz=UTC] would lose data.
+        data_frame["timestamp"] = data_frame.apply(
+            lambda x: x.timestamp.tz_localize(timezone.utc), axis=1
+        )
+        # Bitmex data is accurate to the nanosecond.
+        # However, data is typically only provided to the microsecond.
+        data_frame["nanoseconds"] = data_frame.apply(
+            lambda x: x.timestamp.nanosecond, axis=1
+        )
+        with_nanoseconds = data_frame[data_frame["nanoseconds"] > 0]
+        # On 2017-09-08 there is one timestamp with nanoseconds.
+        # If kwarg self.string_nanoeconds, then strip.
+        total = len(with_nanoseconds)
+        if total:
+            date_string = self.date.isoformat()
+            rows = "row" if total == 1 else "rows"
+            print(f"Unsupported nanoseconds: {total} {rows} on {date_string}")
+            if self.strip_nanoseconds:
+                data_frame["timestamp"] = data_frame.apply(
+                    lambda x: x.timestamp.replace(nanosecond=0)
+                    if x.nanoseconds > 0
+                    else x.timestamp,
+                    axis=1,
+                )
+                data_frame["nanoseconds"] = data_frame.apply(
+                    lambda x: x.timestamp.nanosecond, axis=1
+                )
+                with_nanoseconds = data_frame[data_frame["nanoseconds"] > 0]
+                assert len(with_nanoseconds) == 0
         data_frame = data_frame.astype(
-            {
-                "timestamp": "datetime64",
-                "price": "float64",
-                "size": "int64",
-                "foreignNotional": "float64",
-            }
+            {"price": "float64", "size": "int64", "foreignNotional": "float64"}
         )
         data_frame.insert(0, "date", data_frame["timestamp"].dt.date)
         data_frame["volume"] = data_frame["size"]
