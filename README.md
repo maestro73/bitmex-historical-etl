@@ -1,8 +1,7 @@
 Deploy:
 -------
 
-1) Deploy as a Google Cloud Background Function.
-2) Create a Google Pub/Sub topic, to trigger it.
+1) Deploy as a Google Cloud Background Function, with a Pub/Sub trigger.
 3) Create a Google Cloud Scheduler job to invoke the Pub/Sub trigger.
 
 There is an `invoke` task:
@@ -11,7 +10,7 @@ There is an `invoke` task:
 invoke deploy
 ```
 
-Every 5 minutes, the function will be invoked. There is no further processing if data is not available, or aggregated data already exists.
+Every 10 minutes, the function will be invoked. There is no further processing if data is not available, or aggregated data already exists.
 
 The `invoke` tasks also require `gcloud`. Also, state is stored in Firestore cache.
 
