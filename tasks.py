@@ -31,15 +31,6 @@ def deploy_function(c):
 
 
 @task
-def create_pubsub_topic(c):
-    topic = os.environ.get(PUBSUB_TOPIC)
-    cmd = f"""
-        gcloud pubsub topics create {topic}
-    """
-    c.run(cmd)
-
-
-@task
 def create_scheduler(c):
     topic = os.environ.get(PUBSUB_TOPIC)
     message_body = json.dumps({})
@@ -54,5 +45,5 @@ def create_scheduler(c):
 
 @task
 def deploy(c):
-    for t in (deploy_function, create_pubsub_topic, create_scheduler):
+    for t in (deploy_function, create_scheduler):
         t(c)
