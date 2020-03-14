@@ -18,7 +18,7 @@ def deploy_function(c):
     timeout = 540
     env_vars = get_deploy_env_vars()
     cmd = f"""
-        gcloud functions deploy bitmex-historical \
+        gcloud functions deploy bitmex \
             --region={region} \
             --memory={memory}MB \
             --timeout={timeout}s \
@@ -35,7 +35,7 @@ def create_scheduler(c):
     topic = os.environ.get(PUBSUB_TOPIC)
     message_body = json.dumps({})
     command = f"""
-        gcloud scheduler jobs create pubsub bitmex-historical \
+        gcloud scheduler jobs create pubsub bitmex \
             --schedule="*/10 * * * *" \
             --topic={topic} \
             --message-body='{message_body}'

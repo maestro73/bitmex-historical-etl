@@ -29,7 +29,12 @@ class S3Downloader:
 
     def _extract(self, date, filename):
         try:
-            data_frame = pd.read_csv(filename, engine="python", compression="gzip")
+            data_frame = pd.read_csv(
+                filename,
+                usecols=["timestamp", "symbol", "size", "tickDirection", "price"],
+                engine="python",
+                compression="gzip",
+            )
         except EOFError:
             date_string = date.isoformat()
             print(f"EOFError: {date_string}")

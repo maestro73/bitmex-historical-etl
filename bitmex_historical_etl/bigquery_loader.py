@@ -26,7 +26,6 @@ class BigQueryLoader:
             bigquery.SchemaField("timestamp", "TIMESTAMP", "REQUIRED"),
             bigquery.SchemaField("price", "FLOAT", "REQUIRED"),
             bigquery.SchemaField("volume", "INTEGER", "REQUIRED"),
-            bigquery.SchemaField("foreignNotional", "FLOAT", "REQUIRED"),
             bigquery.SchemaField("tickRule", "INTEGER", "REQUIRED"),
             bigquery.SchemaField("index", "INTEGER", "REQUIRED"),
         ]

@@ -27,7 +27,6 @@ class BitmexHistoricalETL:
             "timestamp",
             "price",
             "volume",
-            "foreignNotional",
             "tickRule",
             "index",
         ]
@@ -80,11 +79,9 @@ class BitmexHistoricalETL:
                 )
                 with_nanoseconds = data_frame[data_frame["nanoseconds"] > 0]
                 assert len(with_nanoseconds) == 0
-        data_frame = data_frame.astype(
-            {"price": "float64", "size": "int64", "foreignNotional": "float64"}
-        )
         data_frame.insert(0, "date", data_frame["timestamp"].dt.date)
-        data_frame["volume"] = data_frame["size"]
+        data_frame = data_frame.astype({"price": "float64", "size": "int64"})
+        data_frame = data_frame.rename(columns={"size": "volume"})
         data_frame["tickRule"] = data_frame.apply(
             lambda x: (1 if x.tickDirection in ("PlusTick", "ZeroPlusTick") else -1),
             axis=1,
