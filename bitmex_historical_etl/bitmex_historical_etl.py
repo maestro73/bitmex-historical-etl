@@ -1,6 +1,7 @@
 import datetime
 from datetime import timezone
 
+import numpy as np
 import pandas as pd
 
 from .bigquery_loader import BigQueryLoader
@@ -80,19 +81,18 @@ class BitmexHistoricalETL:
                 with_nanoseconds = data_frame[data_frame["nanoseconds"] > 0]
                 assert len(with_nanoseconds) == 0
         data_frame.insert(0, "date", data_frame["timestamp"].dt.date)
-        data_frame = data_frame.astype({"price": "float64", "size": "int64"})
         data_frame = data_frame.rename(columns={"size": "volume"})
         data_frame["tickRule"] = data_frame.apply(
             lambda x: (1 if x.tickDirection in ("PlusTick", "ZeroPlusTick") else -1),
             axis=1,
         )
         symbols = data_frame["symbol"].unique()
-        all_df = []
+        data_frame["index"] = np.nan
         for symbol in symbols:
-            df = data_frame[data_frame["symbol"] == symbol]
-            df = df.copy()
-            df.reset_index(drop=True, inplace=True)
-            df["index"] = df.index
-            all_df.append(df)
-        data_frame = pd.concat(all_df)
+            index = data_frame.index[data_frame["symbol"] == symbol]
+            # 0-based index according to symbol.
+            data_frame.loc[index, "index"] = index.values - index.values[0]
+        data_frame = data_frame.astype(
+            {"price": "float64", "volume": "int64", "index": "int64"}
+        )
         return data_frame[self.columns]

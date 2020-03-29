@@ -1,13 +1,13 @@
 from datetime import datetime
 
-import fire
 import pandas as pd
 
+import typer
 from bitmex_historical_etl.utils import set_environment
 from main import BitmexHistoricalETL
 
 
-def get_bitmex_historical(date="2016-05-13", strip_nanoseconds=False):
+def get_bitmex_historical(date: str = "2016-05-13", strip_nanoseconds: bool = False):
     set_environment()
     today = datetime.now().date().isoformat()
     timestamps = pd.date_range(start=date, end=today)
@@ -18,4 +18,4 @@ def get_bitmex_historical(date="2016-05-13", strip_nanoseconds=False):
 
 
 if __name__ == "__main__":
-    fire.Fire(get_bitmex_historical)
+    typer.run(get_bitmex_historical)
