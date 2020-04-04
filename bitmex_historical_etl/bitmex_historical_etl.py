@@ -30,6 +30,7 @@ class BitmexHistoricalETL:
             "volume",
             "tickRule",
             "index",
+            "sequence",
         ]
 
     def main(self):
@@ -95,4 +96,5 @@ class BitmexHistoricalETL:
         data_frame = data_frame.astype(
             {"price": "float64", "volume": "int64", "index": "int64"}
         )
+        data_frame["sequence"] = 0
         return data_frame[self.columns]

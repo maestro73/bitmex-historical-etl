@@ -28,6 +28,7 @@ class BigQueryLoader:
             bigquery.SchemaField("volume", "INTEGER", "REQUIRED"),
             bigquery.SchemaField("tickRule", "INTEGER", "REQUIRED"),
             bigquery.SchemaField("index", "INTEGER", "REQUIRED"),
+            bigquery.SchemaField("sequence", "INTEGER", "REQUIRED"),
         ]
 
         self.dataset = os.environ[BIGQUERY_DATASET]

@@ -30,13 +30,15 @@ class FirestoreCache:
 
         self.collection = os.environ[FIRESTORE_COLLECTION]
         self.document = self.date.isoformat()
-        data = self.get_data(self.collection, self.document)
+        data = self.get_data()
         if data:
             self.stop_execution = True
-            print(f"Data exists: {self.document}")
+            print(f"Firestore: data exists {self.document}")
 
-    def get_data(self, collection, document):
-        document = self.firestore.collection(collection).document(document).get()
+    def get_data(self):
+        document = (
+            self.firestore.collection(self.collection).document(self.document).get()
+        )
         return document.to_dict()
 
     def set_cache(self, symbols):
