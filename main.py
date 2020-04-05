@@ -5,7 +5,7 @@ from bitmex_historical_etl import BitmexHistoricalETL
 from bitmex_historical_etl.utils import get_delta
 
 
-def get_bitmex_historical(event, context):
+def bitmex(event, context):
     yesterday = get_delta(days=-1)
     date = yesterday.isoformat()
     if "data" in event:
@@ -14,5 +14,9 @@ def get_bitmex_historical(event, context):
         # Download previous days data.
         if len(data):
             date = d.get("date", date)
-    controller = BitmexHistoricalETL(date)
-    controller.main()
+            steps = d.get("steps", [])
+            if len(steps):
+                controller = BitmexHistoricalETL(
+                    date, steps, delete_intermediate_table=True
+                )
+                controller.main()

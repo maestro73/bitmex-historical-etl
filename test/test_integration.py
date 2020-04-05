@@ -13,10 +13,12 @@ from google.cloud.exceptions import NotFound
 import main
 from bitmex_historical_etl.constants import (
     BIGQUERY_DATASET,
+    BIGQUERY_INTERMEDIATE_TABLE_NAME,
     BIGQUERY_LOCATION,
     BIGQUERY_TABLE_NAME,
+    DOWNLOAD,
     FIREBASE_ADMIN_CREDENTIALS,
-    FIRESTORE_COLLECTION,
+    STEPS,
 )
 from bitmex_historical_etl.utils import (
     base64_encode_dict,
@@ -31,8 +33,12 @@ mock_context.timestamp = datetime.datetime.utcnow().isoformat()
 
 
 def cleanup_bigquery():
-    table_name = os.environ[BIGQUERY_TABLE_NAME]
-    assert "_test" in table_name
+    table_names = [
+        os.environ[table_name]
+        for table_name in (BIGQUERY_TABLE_NAME, BIGQUERY_INTERMEDIATE_TABLE_NAME)
+    ]
+    for table_name in table_names:
+        assert "_test" in table_name
     credentials, project_id = google.auth.default(
         scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
@@ -42,16 +48,17 @@ def cleanup_bigquery():
         location=os.environ.get(BIGQUERY_LOCATION, None),
     )
     dataset = os.environ[BIGQUERY_DATASET]
-    table_id = f"{dataset}.{table_name}"
-    try:
-        bq.delete_table(table_id)
-    except NotFound:
-        pass
+    for table_name in table_names:
+        table_id = f"{dataset}.{table_name}"
+        try:
+            bq.delete_table(table_id)
+        except NotFound:
+            pass
 
 
 def cleanup_firestore():
-    ref = os.environ[FIRESTORE_COLLECTION]
-    assert "-test" in ref
+    ref = os.environ[BIGQUERY_TABLE_NAME]
+    assert "_test" in ref
     if "FIREBASE_INIT" not in os.environ:
         certificate = Certificate(os.environ[FIREBASE_ADMIN_CREDENTIALS])
         firebase_admin.initialize_app(certificate)
@@ -78,9 +85,9 @@ def setenv():
 
 def test_bitmex_historical_etl(capsys):
     date = "2016-05-13"
-    data = {"date": date}
+    data = {"date": date, "steps": STEPS}
     d = {"data": base64_encode_dict(data)}
-    main.get_bitmex_historical(d, mock_context)
+    main.bitmex(d, mock_context)
     out, err = capsys.readouterr()
     assert f"{date} OK" in out
 
@@ -88,9 +95,9 @@ def test_bitmex_historical_etl(capsys):
 def test_bitmex_historical_etl_404(capsys):
     two_days_from_now = get_delta(days=2)
     date = two_days_from_now.isoformat()
-    data = {"date": date}
+    data = {"date": date, "steps": [DOWNLOAD]}
     d = {"data": base64_encode_dict(data)}
-    main.get_bitmex_historical(d, mock_context)
+    main.bitmex(d, mock_context)
     url = get_bitmex_s3_data_url(two_days_from_now)
     out, err = capsys.readouterr()
     assert f"No data: {url}" in out

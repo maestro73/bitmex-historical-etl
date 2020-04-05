@@ -5,7 +5,7 @@ import firebase_admin
 from firebase_admin import firestore
 from firebase_admin.credentials import Certificate
 
-from .constants import FIREBASE_ADMIN_CREDENTIALS, FIREBASE_URL, FIRESTORE_COLLECTION
+from .constants import BIGQUERY_TABLE_NAME, FIREBASE_ADMIN_CREDENTIALS, FIREBASE_URL
 from .utils import is_local
 
 
@@ -28,19 +28,21 @@ class FirestoreCache:
 
         self.firestore = firestore.client()
 
-        self.collection = os.environ[FIRESTORE_COLLECTION]
+        self.collection = os.environ[BIGQUERY_TABLE_NAME]
         self.document = self.date.isoformat()
-        data = self.get_data()
-        if data:
+        data = self.get()
+        if data and data.get("ok", False):
             self.stop_execution = True
-            print(f"Firestore: data exists {self.document}")
+            print(f"Bitmex data: {self.document} exists")
 
-    def get_data(self):
+    def get(self):
         document = (
             self.firestore.collection(self.collection).document(self.document).get()
         )
         return document.to_dict()
 
-    def set_cache(self, symbols):
-        data = {"symbols": symbols}
+    def set(self, data):
         self.firestore.collection(self.collection).document(self.document).set(data)
+
+    def delete(self):
+        self.firestore.collection(self.collection).document(self.document).delete()

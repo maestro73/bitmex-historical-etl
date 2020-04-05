@@ -5,9 +5,9 @@ import os
 from pathlib import Path
 
 from .constants import (
+    BIGQUERY_INTERMEDIATE_TABLE_NAME,
     BIGQUERY_TABLE_NAME,
     BITMEX_S3,
-    FIRESTORE_COLLECTION,
     GCP_APPLICATION_CREDENTIALS,
     PRODUCTION_ENV_VARS,
 )
@@ -21,11 +21,9 @@ def set_environment():
             if key in GCP_APPLICATION_CREDENTIALS:
                 path = Path.cwd().parents[0] / "keys" / v
                 v = str(path.resolve())
-            if "PYTEST_CURRENT_TEST" in os.environ:
-                if key == BIGQUERY_TABLE_NAME:
-                    v += "_test"
-                elif key == FIRESTORE_COLLECTION:
-                    v += "-test"
+            if key in (BIGQUERY_TABLE_NAME, BIGQUERY_INTERMEDIATE_TABLE_NAME):
+                if "PYTEST_CURRENT_TEST" in os.environ:
+                    v = f"{v}_test"
             os.environ[key] = v
 
 

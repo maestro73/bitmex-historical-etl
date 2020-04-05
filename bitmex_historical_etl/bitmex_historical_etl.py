@@ -1,100 +1,149 @@
 import datetime
-from datetime import timezone
+import os
 
-import numpy as np
-import pandas as pd
+from bitmex_historical_etl.constants import (
+    BIGQUERY_INTERMEDIATE_TABLE_NAME,
+    BIGQUERY_TABLE_NAME,
+    CALCULATE_COLUMNS,
+    COMBINE_TRADES,
+    DOWNLOAD,
+    UPDATE_SEQUENCE,
+)
 
-from .bigquery_loader import BigQueryLoader
+from .bigquery_loader import COMBINED_TRADE_SCHEMA, HISTORICAL_SCHEMA, BigQueryLoader
 from .firestore_cache import FirestoreCache
 from .s3_downloader import S3Downloader
+from .transforms import (
+    calculate_exponent,
+    calculate_notional,
+    combine_trades,
+    prepare_s3,
+    update_sequence,
+)
 
 
 class BitmexHistoricalETL:
-    def __init__(self, date, strip_nanoseconds=False):
-        self.strip_nanoseconds = strip_nanoseconds
+    def __init__(
+        self, date, steps, strip_nanoseconds=False, delete_intermediate_table=False
+    ):
+        self.date_string = date
 
         try:
             self.date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError as e:
             raise e
         else:
-            # Data for XBTUSD exists before this date.
-            # However, size was determined differently.
-            assert self.date >= datetime.date(2016, 5, 13)
+            min_date = datetime.date(2016, 5, 13)
+            if self.date < min_date:
+                date_string = min_date.isoformat()
+                raise ValueError(
+                    f"Minimum date: is {date_string}. "
+                    "XBTUSD contract size was different before this date."
+                )
 
-        self.columns = [
-            "symbol",
-            "date",
-            "timestamp",
-            "price",
-            "volume",
-            "tickRule",
-            "index",
-            "sequence",
-        ]
+        self.steps = steps
+        self.strip_nanoseconds = strip_nanoseconds
+        self.delete_intermediate_table = delete_intermediate_table
+
+        self.firestore_cache = FirestoreCache(self.date)
+        if not self.firestore_cache.stop_execution:
+            self.bigquery_loader = BigQueryLoader(self.date)
 
     def main(self):
-        firestore_cache = FirestoreCache(self.date)
-        if not firestore_cache.stop_execution:
-            data_frame = S3Downloader().download(self.date)
-            if data_frame is not None:
-                df = self.validate_data_frame(data_frame)
-                bigquery_loader = BigQueryLoader(self.date)
-                bigquery_loader.load(df)
-                symbols = df["symbol"].unique().tolist()
-                firestore_cache.set_cache(symbols)
-                date_string = self.date.isoformat()
-                print(f"{date_string} OK")
+        if not self.firestore_cache.stop_execution:
+            data_frame = None
+            for step in self.steps:
+                data = self.firestore_cache.get()
+                if not data and step == DOWNLOAD:
+                    data_frame = getattr(self, step)()
+                elif data["step"] == step:
+                    data_frame = getattr(self, step)(data_frame)
 
-    def validate_data_frame(self, data_frame):
-        timestamp_format = "%Y-%m-%dD%H:%M:%S.%f"
-        data_frame["timestamp"] = pd.to_datetime(
-            data_frame["timestamp"], format=timestamp_format
-        )
-        # Because pyarrow.lib.ArrowInvalid: Casting from timestamp[ns]
-        # to timestamp[us, tz=UTC] would lose data.
-        data_frame["timestamp"] = data_frame.apply(
-            lambda x: x.timestamp.tz_localize(timezone.utc), axis=1
-        )
-        # Bitmex data is accurate to the nanosecond.
-        # However, data is typically only provided to the microsecond.
-        data_frame["nanoseconds"] = data_frame.apply(
-            lambda x: x.timestamp.nanosecond, axis=1
-        )
-        with_nanoseconds = data_frame[data_frame["nanoseconds"] > 0]
-        # On 2017-09-08 there is one timestamp with nanoseconds.
-        # If kwarg self.string_nanoeconds, then strip.
-        total = len(with_nanoseconds)
-        if total:
-            date_string = self.date.isoformat()
-            rows = "row" if total == 1 else "rows"
-            print(f"Unsupported nanoseconds: {total} {rows} on {date_string}")
-            if self.strip_nanoseconds:
-                data_frame["timestamp"] = data_frame.apply(
-                    lambda x: x.timestamp.replace(nanosecond=0)
-                    if x.nanoseconds > 0
-                    else x.timestamp,
-                    axis=1,
+    def download(self):
+        data_frame = S3Downloader().download(self.date)
+        if data_frame is not None:
+            data_frame = prepare_s3(
+                self.date, data_frame, strip_nanoseconds=self.strip_nanoseconds
+            )
+            self.bigquery_loader.load(
+                os.environ[BIGQUERY_INTERMEDIATE_TABLE_NAME],
+                HISTORICAL_SCHEMA,
+                data_frame,
+            )
+            symbols = data_frame["symbol"].unique().tolist()
+            data = {
+                "symbols": {symbol: {} for symbol in symbols},
+                "step": UPDATE_SEQUENCE,
+            }
+            self.firestore_cache.set(data)
+            print(f"Bitmex data: {self.date_string} downloaded")
+        return data_frame
+
+    def update_sequence(self, data_frame):
+        if data_frame is None:
+            data_frame = self.bigquery_loader.sequence_query()
+        data_frame = update_sequence(data_frame)
+        try:
+            self.bigquery_loader.load(
+                os.environ[BIGQUERY_INTERMEDIATE_TABLE_NAME],
+                HISTORICAL_SCHEMA,
+                data_frame,
+            )
+        except Exception as e:
+            self.firestore_cache.delete()
+            raise e
+        else:
+            data = self.firestore_cache.get()
+            data["step"] = COMBINE_TRADES
+            data = self.firestore_cache.set(data)
+            print(f"Bitmex data: {self.date_string} sequenced")
+            return data_frame
+
+    def combine_trades(self, data_frame):
+        if data_frame is None:
+            data_frame = self.bigquery_loader.combine_trade_query()
+        data_frame = combine_trades(data_frame)
+        try:
+            self.bigquery_loader.load(
+                os.environ[BIGQUERY_TABLE_NAME], COMBINED_TRADE_SCHEMA, data_frame
+            )
+        except Exception as e:
+            self.on_transform_exception()
+            raise e
+        else:
+            if self.delete_intermediate_table:
+                self.bigquery_loader.delete_table(
+                    os.environ[BIGQUERY_INTERMEDIATE_TABLE_NAME]
                 )
-                data_frame["nanoseconds"] = data_frame.apply(
-                    lambda x: x.timestamp.nanosecond, axis=1
-                )
-                with_nanoseconds = data_frame[data_frame["nanoseconds"] > 0]
-                assert len(with_nanoseconds) == 0
-        data_frame.insert(0, "date", data_frame["timestamp"].dt.date)
-        data_frame = data_frame.rename(columns={"size": "volume"})
-        data_frame["tickRule"] = data_frame.apply(
-            lambda x: (1 if x.tickDirection in ("PlusTick", "ZeroPlusTick") else -1),
-            axis=1,
-        )
-        symbols = data_frame["symbol"].unique()
-        data_frame["index"] = np.nan
-        for symbol in symbols:
-            index = data_frame.index[data_frame["symbol"] == symbol]
-            # 0-based index according to symbol.
-            data_frame.loc[index, "index"] = index.values - index.values[0]
-        data_frame = data_frame.astype(
-            {"price": "float64", "volume": "int64", "index": "int64"}
-        )
-        data_frame["sequence"] = 0
-        return data_frame[self.columns]
+            data = self.firestore_cache.get()
+            data["step"] = CALCULATE_COLUMNS
+            data = self.firestore_cache.set(data)
+            print(f"Bitmex data: {self.date_string} combined")
+            return data_frame
+
+    def calculate_columns(self, data_frame):
+        if data_frame is None:
+            data_frame = self.bigquery_loader.calculation_query()
+        data_frame = calculate_notional(data_frame)
+        print(f"Bitmex data: {self.date_string} notional calculated")
+        data_frame = calculate_exponent(data_frame)
+        print(f"Bitmex data: {self.date_string} exponent calculated")
+        try:
+            self.bigquery_loader.load(
+                os.environ[BIGQUERY_TABLE_NAME], COMBINED_TRADE_SCHEMA, data_frame
+            )
+        except Exception as e:
+            self.on_transform_exception()
+            raise e
+        else:
+            data = self.firestore_cache.get()
+            del data["step"]
+            data["ok"] = True
+            data = self.firestore_cache.set(data)
+            print(f"Bitmex data: {self.date_string} OK")
+            return data_frame
+
+    def on_transform_exception(self):
+        data = self.firestore_cache.get()
+        data["step"] = COMBINE_TRADES
+        self.firestore_cache.set(data)
