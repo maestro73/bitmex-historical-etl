@@ -56,7 +56,7 @@ class BitmexHistoricalETL:
                 data = self.firestore_cache.get()
                 if not data and step == DOWNLOAD:
                     data_frame = getattr(self, step)()
-                elif data["step"] == step:
+                elif data and data["step"] == step:
                     data_frame = getattr(self, step)(data_frame)
 
     def download(self):
