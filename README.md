@@ -1,8 +1,28 @@
+Download Bitmex historical data from S3, and load it into Google BigQuery:
+--------------------------------------------------------------------------
+
+This:
+
+| symbol | date | timestamp | price	| volume | tickRule | index |
+|--------|------|-----------|-------|--------|----------|-------|
+| XBTUSD | 2016-05-13 | 03:23:24.383144 | 454.13 | 500 | -1 | 8 |
+| XBTUSD | 2016-05-13 | 03:23:24.383144 | 454.13 | 3000 | -1 | 9 |
+| XBTUSD | 2016-05-13 | 03:23:24.383144 | 454.14 | 1000 | 1 | 10 |
+| XBTUSD | 2016-05-13 | 03:23:24.383144 | 454.16 | 2000 | 1 | 11 |
+| XBTUSD | 2016-05-13 | 03:24:36.306484 | 454.18 | 2000 | 1 | 12 |
+
+Becomes this:
+
+| symbol | date | timestamp | price | avgPrice | volume | tickRule | exponent | notional |
+|--------|------|-----------|-------|----------|--------|----------|----------|----------|
+| XBTUSD | 2016-05-13 | 03:23:24.383144 | 454.13 | 454.13 | 3500 | -1 | 2 | 7.7... | 7 |
+| XBTUSD | 2016-05-13 | 03:23:24.383144 | 454.16 | 454.15 | 3000 | 1 | 3 | 6.6... | 8 |
+| XBTUSD | 2016-05-13 | 03:24:36.306484 | 454.18 | 454.18 | 2000 | 1 | 3 | 4.4... | 9 |
+
 Deploy:
 -------
 
-1) Deploy as a Google Cloud Background Function, with a Pub/Sub trigger.
-3) Create a Google Cloud Scheduler job to invoke the Pub/Sub trigger.
+Deploy as a Google Cloud Background Function, with a Pub/Sub trigger.
 
 There is an `invoke` task:
 
@@ -10,9 +30,7 @@ There is an `invoke` task:
 invoke deploy
 ```
 
-Every 10 minutes, the function will be invoked. There is no further processing if data is not available, or aggregated data already exists.
-
-The `invoke` tasks also require `gcloud`. Also, state is stored in Firestore cache.
+There is no further processing if data is not available, or aggregated data already exists.  The `invoke` tasks also require `gcloud`. Also, state is stored in Firestore cache.
 
 Script:
 -------
