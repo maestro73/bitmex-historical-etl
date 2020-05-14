@@ -4,7 +4,7 @@ from ..constants import ETHUSD, XBTUSD, XRPUSD, uBTC
 def calc_notional(x):
     if x["symbol"] == XBTUSD:
         return x["volume"] / x.price
-    elif x["symbol"] == ETHUSD:
+    elif x["symbol"].startswith(ETHUSD):
         return x["volume"] * x["price"] * uBTC
     elif x["symbol"] == XRPUSD:
         return x["volume"] * x["price"] * uBTC / 20
